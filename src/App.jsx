@@ -148,6 +148,12 @@ function AppContent() {
 }
 
 function App() {
+  const walletConnectProjectId = import.meta.env.VITE_WALLET_CONNECT_PROJECT_ID
+
+  if(!walletConnectProjectId){
+    console.error(`Wallet connect project id is: ${walletConnectProjectId}`)
+  }
+  
   return (
     <VeChainKitProvider
       network={{
@@ -158,18 +164,18 @@ function App() {
       dappKit={{
         nodeUrl: 'https://testnet.vechain.org/',
         genesis: 'test',
-        walletConnectOptions: {
-          projectId: 'YOUR_WALLET_CONNECT_PROJECT_ID', 
+        walletConnectOptions: walletConnectProjectId ? {
+          projectId: walletConnectProjectId, 
           metadata: {
             name: 'Learn2Earn',
             description: 'VeChain Education Platform',
             url: window.location.origin,
             icons: [`${window.location.origin}/logo.png`],
           },
-        },
+        } : undefined,
         usePersistence: true,
         useFirstDetectedSource: false,
-        allowedWallets: ['veworld', 'sync2', 'wallet-connect']
+        allowedWallets: walletConnectProjectId ? ['veworld', 'sync2', 'wallet-connect'] : ['veworld', 'sync2']
       }}
       loginMethods={['vechain', 'wallet']}
     >

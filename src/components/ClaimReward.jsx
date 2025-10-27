@@ -1,25 +1,10 @@
-import React, { useState, useEffect } from 'react';
-import { CONTRACT_ADDRESS, CONTRACT_ABI } from '../config/contract';
+import React, { useState } from 'react';
+import { claimReward as claimRewardApi } from '../services/api';
 
-function ClaimReward({ account }) {
+function ClaimReward({ account, onClaimSuccess }) {
   const [isClaiming, setIsClaiming] = useState(false);
   const [claimStatus, setClaimStatus] = useState(null);
   const [txId, setTxId] = useState(null);
-  const [isRegistered, setIsRegistered] = useState(true); // Default to true since this component only shows for registered users
-  const [isAlreadyGraded, setIsAlreadyGraded] = useState(false);
-  const [isAlreadyRewarded, setIsAlreadyRewarded] = useState(false);
-
-  useEffect(() => {
-    checkStudentStatus();
-  }, [account]);
-
-  const checkStudentStatus = async () => {
-    if (!account) return;
-
-    // Since this component uses the backend API, we don't need to check blockchain status
-    // The backend handles the smart contract interactions
-    console.log('ClaimReward component ready for account:', account);
-  };
 
   const handleClaimReward = async () => {
     if (!account) {
@@ -32,32 +17,18 @@ function ClaimReward({ account }) {
 
     try {
       // Call the backend API to claim the reward
-      const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
-      const response = await fetch(`${API_BASE_URL}/submissions/${account.toLowerCase()}/claim`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        }
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.message || 'Failed to claim reward');
-      }
+      const data = await claimRewardApi(account);
 
       setTxId(data.txId);
       setClaimStatus({
         type: 'success',
-        message: data.txId === 'pending' ? 
-          'Reward claim recorded! Note: Smart contract integration is pending - this is currently a demo.' :
-          'Reward claim submitted! Transaction is being processed.'
+        message: 'Reward claim submitted! Transaction is being processed.'
       });
 
-      // Refresh the student status after a delay
-      setTimeout(() => {
-        checkStudentStatus();
-      }, 3000);
+      // Let parent refresh current status
+      if (typeof onClaimSuccess === 'function') {
+        onClaimSuccess();
+      }
 
     } catch (error) {
       console.error('Error claiming reward:', error);
@@ -70,49 +41,16 @@ function ClaimReward({ account }) {
     }
   };
 
-  // Transaction monitoring is handled by the backend
-  // No need for client-side transaction monitoring since the backend handles the claim
-
   const openExplorer = () => {
     if (txId && txId !== 'pending') {
       window.open(`https://explore-testnet.vechain.org/transactions/${txId}`, '_blank');
     }
   };
 
-  if (!isRegistered) {
-    return (
-      <div className="reward-section">
-        <h3>Student Registration Required</h3>
-        <p>You need to register as a student first before you can claim rewards.</p>
-        <div className="status-message info">
-          Please register as a student by paying the 1 VET registration fee.
-        </div>
-      </div>
-    );
-  }
-
-  if (isAlreadyRewarded) {
-    return (
-      <div className="reward-section">
-        <h3>Reward Already Claimed</h3>
-        <p>You have already claimed your B3TR token reward for this submission.</p>
-        <div className="status-message success">
-          Your B3TR tokens have been distributed to your wallet.
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="reward-section">
       <h3>Congratulations! Your submission has been approved</h3>
       <p>You can now claim your B3TR token reward</p>
-      
-      {isAlreadyGraded && (
-        <div className="status-message info">
-          Your submission has already been graded. You can claim your reward below.
-        </div>
-      )}
       
       <button
         className="btn btn-success"

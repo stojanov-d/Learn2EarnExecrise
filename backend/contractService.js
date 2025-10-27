@@ -1,17 +1,17 @@
 import { ThorClient } from '@vechain/sdk-network';
-import pkg from '@vechain/sdk-core';
-const { Address, Hex, TransactionHandler, unitsUtils, secp256k1 } = pkg;
+import pkg, { networkInfo } from '@vechain/sdk-core';
+const { Address, Hex, Secp256k1, ABIContract, Transaction } = pkg;
 import dotenv from 'dotenv';
 
 dotenv.config();
 
 // Contract configuration
-const CONTRACT_ADDRESS = '0xa56903cf66bacca8fb5911eb759a8566bda978ac';
+const CONTRACT_ADDRESS = '0xcb0e9d8e05b70f9ed499398911a289570a9ccf24';
 const NETWORK_URL = 'https://testnet.vechain.org/';
 const REGISTRAR_PRIVATE_KEY = process.env.VECHAIN_PRIVATE_KEY;
 
 // Contract ABI for gradeSubmission function
-const GRADE_SUBMISSION_ABI = {
+const GRADE_SUBMISSION_ABI = [{
   name: 'gradeSubmission',
   type: 'function',
   inputs: [
@@ -20,10 +20,10 @@ const GRADE_SUBMISSION_ABI = {
   ],
   outputs: [],
   stateMutability: 'nonpayable'
-};
+}];
 
 // Initialize VeChain SDK
-const thor = ThorClient.fromUrl(NETWORK_URL);
+const thor = ThorClient.at(NETWORK_URL); // ThorClient.from is depracated
 
 export async function gradeSubmissionOnChain(studentAddress, approved) {
   try {
@@ -33,24 +33,27 @@ export async function gradeSubmissionOnChain(studentAddress, approved) {
     const privateKeyBuffer = Hex.of(REGISTRAR_PRIVATE_KEY).bytes;
     
     // Derive the registrar address
-    const registrarAddress = Address.ofPublicKey(secp256k1.derivePublicKey(privateKeyBuffer));
+    const publicKey = Secp256k1.derivePublicKey(privateKeyBuffer);
+    const registrarAddress = Address.ofPublicKey(publicKey);
     console.log('Registrar address:', registrarAddress.toString());
 
     // Get the latest block
     const bestBlock = await thor.blocks.getBestBlockCompressed();
     
+    const encodedData = ABIContract.ofAbi(GRADE_SUBMISSION_ABI).encodeFunctionInput('gradeSubmission', [studentAddress, approved])
+    const digitsFromData = "0x" + encodedData.digits;
     // Create transaction clause
     const clause = {
       to: CONTRACT_ADDRESS,
       value: '0x0',
-      data: thor.contracts.encodeFunctionInput(GRADE_SUBMISSION_ABI, [studentAddress, approved])
+      data: digitsFromData
     };
 
     console.log('Transaction clause:', clause);
 
     // Build transaction
     const txBody = {
-      chainTag: bestBlock.id.slice(-2),
+      chainTag: networkInfo.testnet.chainTag,
       blockRef: bestBlock.id.slice(0, 18),
       expiration: 32,
       clauses: [clause],
@@ -63,26 +66,26 @@ export async function gradeSubmissionOnChain(studentAddress, approved) {
     console.log('Transaction body:', txBody);
 
     // Sign and send transaction
-    const signedTx = TransactionHandler.sign(txBody, privateKeyBuffer);
+    const signedTx = Transaction.of(txBody).sign(privateKeyBuffer);
     const txId = await thor.transactions.sendTransaction(signedTx);
     
     console.log('Transaction sent:', txId);
     
     // Wait for transaction receipt
-    const receipt = await waitForTransaction(txId);
+    const receipt = await txId.wait(60000);
     
     if (receipt && !receipt.reverted) {
       console.log('Transaction successful:', txId);
       return {
         success: true,
-        txId: txId,
+        txId: txId.id,
         receipt: receipt
       };
     } else {
       console.error('Transaction reverted:', receipt);
       return {
         success: false,
-        txId: txId,
+        txId: txId.id,
         error: 'Transaction was reverted'
       };
     }

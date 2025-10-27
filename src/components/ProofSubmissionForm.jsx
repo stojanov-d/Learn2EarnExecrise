@@ -1,5 +1,8 @@
-import React, { useState } from 'react';
-import { submitProof } from '../services/api';
+import React, { useState, useMemo } from 'react';
+import { submitProof as submitProofApi } from '../services/api';
+import { useWallet, useSendTransaction, useTransactionModal } from '@vechain/vechain-kit';
+import { ethers } from 'ethers';
+import { CONTRACT_ADDRESS, CONTRACT_ABI } from '../config/contract';
 
 function ProofSubmissionForm({ account, onSubmissionSuccess, disabled }) {
   const [formData, setFormData] = useState({
@@ -9,6 +12,33 @@ function ProofSubmissionForm({ account, onSubmissionSuccess, disabled }) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
+
+  // NEW: wallet + tx helpers
+  const { account: walletAccount } = useWallet();
+  const { open: openTransactionModal } = useTransactionModal();
+  const currentAccount = walletAccount?.address || account;
+
+  // NEW: build submitProof clause
+  const submitProofABI = useMemo(
+    () => CONTRACT_ABI.find(fn => fn.name === 'submitProof'),
+    []
+  );
+  const submitProofClauses = useMemo(() => {
+    const proof = formData.proofLink.trim();
+    if (!proof || !submitProofABI) return [];
+    const iface = new ethers.Interface(CONTRACT_ABI);
+    return [{
+      to: CONTRACT_ADDRESS,
+      value: '0',
+      data: iface.encodeFunctionData('submitProof', [proof]),
+      comment: `Submit proof link`,
+      abi: submitProofABI
+    }];
+  }, [formData.proofLink]);
+
+  const { sendTransaction } = useSendTransaction({
+    signerAccountAddress: currentAccount ?? ''
+  });
 
   const handleChange = (e) => {
     setFormData({
@@ -25,9 +55,16 @@ function ProofSubmissionForm({ account, onSubmissionSuccess, disabled }) {
       setError('Please fill in all fields');
       return;
     }
-
     if (!formData.proofLink.startsWith('http://') && !formData.proofLink.startsWith('https://')) {
       setError('Please enter a valid URL for the proof link');
+      return;
+    }
+    if (!currentAccount || currentAccount === '*') {
+      setError('Please connect your wallet first');
+      return;
+    }
+    if (submitProofClauses.length === 0) {
+      setError('Transaction not ready. Please check form data.');
       return;
     }
 
@@ -35,19 +72,23 @@ function ProofSubmissionForm({ account, onSubmissionSuccess, disabled }) {
     setError('');
 
     try {
-      await submitProof({
-        walletAddress: account.toLowerCase(),
+      // 1) On-chain submitProof from the student's wallet
+      openTransactionModal();
+      await sendTransaction(submitProofClauses);
+
+      // 2) Persist to backend for moderation/workflow
+      await submitProofApi({
+        walletAddress: currentAccount.toLowerCase(),
         name: formData.name,
         proofLink: formData.proofLink
       });
-      
+
       setSuccess(true);
       setFormData({ name: '', proofLink: '' });
       onSubmissionSuccess();
-      
       setTimeout(() => setSuccess(false), 5000);
     } catch (err) {
-      setError(err.message || 'Failed to submit proof. Please try again.');
+      setError(err?.reason || err?.message || 'Failed to submit proof. Please try again.');
     } finally {
       setIsSubmitting(false);
     }

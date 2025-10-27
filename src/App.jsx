@@ -113,7 +113,10 @@ function AppContent() {
               ) : (isApproved || submissionStatus?.approved) ? (
                 /* Show claim reward section */
                 <div className="card">
-                  <ClaimReward account={account} />
+                  <ClaimReward 
+                    account={account} 
+                    onClaimSuccess={() => setTimeout(checkStatus, 2000)}
+                  />
                 </div>
               ) : (
                 /* Show submission form and status */

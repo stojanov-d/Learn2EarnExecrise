@@ -33,3 +33,14 @@ export const getApprovedSubmissions = async () => {
     throw new Error(error.response?.data?.message || 'Failed to fetch approved submissions');
   }
 };
+
+// Claim reward for an approved submission
+export const claimReward = async (walletAddress) => {
+  try {
+    const normalized = walletAddress.toLowerCase();
+    const response = await axios.post(`${API_BASE_URL}/submissions/${normalized}/claim`);
+    return response.data;
+  } catch (error) {
+    throw new Error(error.response?.data?.message || 'Failed to claim reward');
+  }
+};
